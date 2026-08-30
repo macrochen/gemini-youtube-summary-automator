@@ -377,7 +377,7 @@
     // ==========================================
     async function executePostGenerationTasks(summaryText, mode) {
         try {
-            downloadMarkdown(summaryText);
+            await downloadMarkdown(summaryText);
         } catch (e) {
             console.error("❌ MD 下载报错:", e);
         }
@@ -396,14 +396,45 @@
         }
     }
 
-    function downloadMarkdown(text) {
-        let title = document.title || "";
-        // 清理掉 Gemini 默认加的后缀，以及不合法的文件名字符
-        title = title.replace(' - Google Gemini', '').replace(' - Gemini', '').replace(/[\/\\:*?"<>|]/g, ' ').trim();
+    async function downloadMarkdown(text) {
+        let title = "";
         
-        // Fallback (降级) 机制：如果页面没加载完标题，document.title 只是 "Google Gemini"，
-        // 我们就降级去提取文本中第一个有意义的行作为标题。
-        if (!title || title.toLowerCase() === 'google gemini' || title.toLowerCase() === 'gemini') {
+        // 尝试等待最多 10 秒钟，以便 Gemini 自动生成并更新侧边栏或网页标题
+        for (let i = 0; i < 10; i++) {
+            // 1. 尝试从网页标题获取
+            let docTitle = document.title || "";
+            docTitle = docTitle.replace(' - Google Gemini', '').replace(' - Gemini', '').trim();
+            if (docTitle && docTitle.toLowerCase() !== 'google gemini' && docTitle.toLowerCase() !== 'gemini' && docTitle !== 'Untitled prompt' && docTitle !== '新聊天' && docTitle !== 'New chat') {
+                title = docTitle;
+                break;
+            }
+
+            // 2. 尝试从侧边栏的活动链接获取
+            const pathParts = window.location.pathname.split('/');
+            const currentId = pathParts[pathParts.length - 1];
+            if (currentId && currentId !== 'app' && currentId !== 'gem') {
+                const allLinks = document.querySelectorAll('a[href*="/app/"], a[href*="/gem/"]');
+                const activeLink = Array.from(allLinks).find(el => el.getAttribute('href') && el.getAttribute('href').includes(currentId));
+                if (activeLink) {
+                    let linkText = activeLink.innerText || activeLink.textContent;
+                    if (linkText) {
+                        let lines = linkText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                        let sidebarTitle = lines[0];
+                        if (sidebarTitle && sidebarTitle !== 'New chat' && sidebarTitle !== '新聊天' && sidebarTitle !== 'Untitled prompt') {
+                            title = sidebarTitle;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        title = title.replace(/[\/\\:*?"<>|]/g, ' ').trim();
+
+        // Fallback (降级) 机制：如果等了 10 秒还是没拿到合法的页面标题
+        if (!title) {
             console.log("⚠️ 网页标题未加载完成，启动 Fallback 机制提取正文标题...");
             const lines = text.trim().split('\n');
             let foundTitle = false;
