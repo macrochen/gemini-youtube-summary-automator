@@ -402,18 +402,25 @@
         title = title.replace(' - Google Gemini', '').replace(' - Gemini', '').replace(/[\/\\:*?"<>|]/g, ' ').trim();
         
         // Fallback (降级) 机制：如果页面没加载完标题，document.title 只是 "Google Gemini"，
-        // 我们就降级去提取文本的正文第一行作为标题。
+        // 我们就降级去提取文本中第一个有意义的行作为标题。
         if (!title || title.toLowerCase() === 'google gemini' || title.toLowerCase() === 'gemini') {
             console.log("⚠️ 网页标题未加载完成，启动 Fallback 机制提取正文标题...");
             const lines = text.trim().split('\n');
-            if (lines.length > 0) {
-                let firstLine = lines[0].replace(/[#*`]/g, '').trim();
-                if (firstLine.length > 0 && firstLine.length < 50) {
-                    title = firstLine.replace(/[\/\\:*?"<>|]/g, ' ').trim();
-                } else {
-                    title = "youtube_summary_" + new Date().getTime();
+            let foundTitle = false;
+            for (let line of lines) {
+                line = line.trim();
+                // 跳过空行、源链接行、分割线等无意义行
+                if (line.length === 0 || line.includes('源视频链接：') || line.startsWith('---') || line.startsWith('>') || line.match(/^https?:\/\//)) {
+                    continue;
                 }
-            } else {
+                let cleanLine = line.replace(/^[#*`\-\s]+/, '').replace(/[#*`\-\s]+$/, '').trim();
+                if (cleanLine.length > 0) {
+                    title = cleanLine.replace(/[\/\\:*?"<>|]/g, ' ').trim();
+                    foundTitle = true;
+                    break;
+                }
+            }
+            if (!foundTitle) {
                 title = "youtube_summary_" + new Date().getTime();
             }
         }
